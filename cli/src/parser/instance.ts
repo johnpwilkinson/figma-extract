@@ -1,6 +1,9 @@
 /**
  * Extracts a Figma INSTANCE node into a ParsedInstance.
  * Resolves component names via the component map and extracts variant properties.
+ * Also extracts visual properties (fill, stroke, corner radius, opacity) since
+ * instances are visually identical to frames — they have their own fills that
+ * may differ across variants (e.g., a selected button is red, unselected is gray).
  */
 
 import type { FigmaNode, FigmaComponentMeta } from "../types/figma-api";
@@ -9,6 +12,10 @@ import {
   resolveComponent,
   parseComponentProperties,
 } from "../resolvers/component-map";
+import {
+  resolveFirstSolidFill,
+  resolveBorderRadius,
+} from "../resolvers/tailwind";
 
 export interface InstanceExtractOptions {
   components: Record<string, FigmaComponentMeta>;
@@ -54,6 +61,33 @@ export function extractInstance(
 
   if (overrides && overrides.length > 0) {
     instance.overrides = overrides;
+  }
+
+  // Visual properties — instances are frames visually
+  if (node.fills?.length) {
+    const fill = resolveFirstSolidFill(node.fills, "bg");
+    if (fill) instance.fill = fill;
+  }
+
+  if (node.strokes?.length) {
+    const stroke = resolveFirstSolidFill(node.strokes, "border");
+    if (stroke) instance.stroke = stroke;
+    if (node.strokeWeight) instance.strokeWeight = node.strokeWeight;
+  }
+
+  if (node.cornerRadius && node.cornerRadius > 0) {
+    instance.cornerRadius = resolveBorderRadius(node.cornerRadius);
+  }
+
+  if (node.opacity !== undefined && node.opacity < 1) {
+    instance.opacity = node.opacity;
+  }
+
+  // Size
+  const bb = node.absoluteBoundingBox;
+  if (bb) {
+    instance.width = Math.round(bb.width) + "px";
+    instance.height = Math.round(bb.height) + "px";
   }
 
   return instance;

@@ -211,6 +211,15 @@ function formatInstance(
     lines.push(p + "Source: external library");
   }
 
+  // Visual properties (instances are visually frames)
+  if (node.fill) lines.push(p + colorStr(node.fill, "Fill"));
+  if (node.stroke) {
+    lines.push(p + colorStr(node.stroke, "Stroke"));
+    if (node.strokeWeight) lines.push(p + "Stroke weight: " + node.strokeWeight + "px");
+  }
+  if (node.cornerRadius) lines.push(p + "Corner radius: " + tw(node.cornerRadius));
+  if (node.opacity !== undefined) lines.push(p + "Opacity: " + node.opacity);
+
   // Fully expand children — show everything inside the instance
   if (node.children?.length) {
     lines.push("");

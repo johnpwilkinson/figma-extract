@@ -75,6 +75,14 @@ export interface ParsedInstance extends ParsedNodeBase {
   isRemote: boolean;
   variantProperties?: Record<string, string>;
   overrides?: string[];
+  // Visual properties (instances are visually frames)
+  fill?: ParsedColor;
+  stroke?: ParsedColor;
+  strokeWeight?: number;
+  cornerRadius?: TailwindResolved;
+  opacity?: number;
+  width?: string;
+  height?: string;
   children?: ParsedNode[];
 }
 
