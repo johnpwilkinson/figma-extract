@@ -1,0 +1,14 @@
+{
+  "tailwindConfig": "./tailwind.config.ts",
+  "componentMap": {
+    "Button": "shadcn/Button",
+    "Card": "shadcn/Card",
+    "Badge": "shadcn/Badge",
+    "Input": "shadcn/Input",
+    "Dialog": "shadcn/Dialog"
+  },
+  "iconLibrary": "lucide-react",
+  "defaults": {
+    "font": "Inter"
+  }
+}

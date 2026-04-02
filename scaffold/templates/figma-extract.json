@@ -1,0 +1,27 @@
+{
+  "componentMap": {
+    "Button": "shadcn/Button",
+    "Card": "shadcn/Card",
+    "Badge": "shadcn/Badge",
+    "Input": "shadcn/Input",
+    "Dialog": "shadcn/Dialog",
+    "Select": "shadcn/Select",
+    "Table": "shadcn/Table",
+    "Checkbox": "shadcn/Checkbox",
+    "Tabs": "shadcn/Tabs",
+    "Sheet": "shadcn/Sheet",
+    "Popover": "shadcn/Popover",
+    "Accordion": "shadcn/Accordion",
+    "Avatar": "shadcn/Avatar",
+    "Tooltip": "shadcn/Tooltip",
+    "Progress": "shadcn/Progress",
+    "Separator": "shadcn/Separator",
+    "Switch": "shadcn/Switch",
+    "Slider": "shadcn/Slider",
+    "RadioGroup": "shadcn/RadioGroup"
+  },
+  "iconLibrary": "lucide-react",
+  "defaults": {
+    "font": "Geist Variable"
+  }
+}

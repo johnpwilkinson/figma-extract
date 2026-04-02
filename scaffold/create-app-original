@@ -1,0 +1,394 @@
+#!/bin/bash
+# create-shadcn-app - One-liner to create a fully configured Vite + React + shadcn/ui project
+# Usage: create-shadcn-app <project-name>
+
+set -e
+
+PROJECT_NAME="${1:-}"
+
+if [ -z "$PROJECT_NAME" ]; then
+  echo "Usage: create-shadcn-app <project-name>"
+  exit 1
+fi
+
+# Check if directory already exists
+if [ -d "$PROJECT_NAME" ]; then
+  echo "Error: Directory '$PROJECT_NAME' already exists"
+  exit 1
+fi
+
+echo "🚀 Creating $PROJECT_NAME with Vite + React + TypeScript + shadcn/ui..."
+
+# Step 1: Create Vite project (fully non-interactive with SWC for faster builds)
+npm create vite@latest "$PROJECT_NAME" -- --template react-swc-ts --yes
+
+# Step 2: Enter project directory
+cd "$PROJECT_NAME"
+
+# Step 3: Install ALL dependencies in a single npm install (performance optimization)
+echo "📦 Installing dependencies (base + Tailwind + Zustand + TanStack)..."
+npm install \
+  tailwindcss \
+  @tailwindcss/vite \
+  zustand \
+  @tanstack/react-router \
+  @tanstack/react-table
+
+npm install -D @types/node
+
+# Step 4: Update vite.config.ts with Tailwind plugin and path alias
+cat > vite.config.ts << 'EOF'
+import path from "path"
+import tailwindcss from "@tailwindcss/vite"
+import react from "@vitejs/plugin-react-swc"
+import { defineConfig } from "vite"
+
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+    },
+  },
+})
+EOF
+echo "   ✓ vite.config.ts updated"
+
+# Step 5: Update tsconfig.json with path aliases
+cat > tsconfig.json << 'EOF'
+{
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ],
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  }
+}
+EOF
+echo "   ✓ tsconfig.json updated"
+
+# Step 6: Update tsconfig.app.json - add baseUrl and paths (cross-platform sed)
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  sed -i '' 's/"compilerOptions": {/"compilerOptions": {\n    "baseUrl": ".",\n    "paths": { "@\/*": [".\/src\/*"] },/' tsconfig.app.json
+else
+  sed -i 's/"compilerOptions": {/"compilerOptions": {\n    "baseUrl": ".",\n    "paths": { "@\/*": [".\/src\/*"] },/' tsconfig.app.json
+fi
+echo "   ✓ tsconfig.app.json updated"
+
+# Step 7: Create src/index.css with Tailwind import
+cat > src/index.css << 'EOF'
+@import "tailwindcss";
+EOF
+echo "   ✓ src/index.css created"
+
+# Step 8: Initialize shadcn with defaults (non-interactive)
+echo "⚙️  Initializing shadcn/ui..."
+npx --yes shadcn@latest init --defaults --yes
+
+# Step 8.5: Inject ALL shadcn registries (fetched from official source of truth)
+echo "📦 Injecting all shadcn registries..."
+REGISTRIES_URL="https://ui.shadcn.com/r/registries.json"
+
+# Potentially paid/commercial registries to exclude
+EXCLUDE_PAID='["@clerk","@algolia","@shadcnui-blocks","@uselayouts","@gooseui","@zippystarter","@lytenyte"]'
+
+# Fetch registries and transform to components.json format (excluding paid)
+REGISTRIES=$(curl -s "$REGISTRIES_URL" | jq --argjson exclude "$EXCLUDE_PAID" '
+  [.[] | select(.name as $n | $exclude | index($n) | not)] |
+  reduce .[] as $r ({}; . + {($r.name): $r.url})
+')
+
+if [ -n "$REGISTRIES" ] && [ "$REGISTRIES" != "null" ]; then
+  # Inject registries into components.json
+  jq --argjson regs "$REGISTRIES" '. + {registries: $regs}' components.json > components.json.tmp && \
+    mv components.json.tmp components.json
+  REGISTRY_COUNT=$(echo "$REGISTRIES" | jq 'keys | length')
+  echo "   ✓ Injected $REGISTRY_COUNT registries (excluding paid)"
+else
+  echo "   ⚠ Could not fetch registries, skipping injection"
+fi
+
+# Step 9: Install ALL shadcn components
+echo "📦 Installing all shadcn components..."
+npx --yes shadcn@latest add --all --yes
+
+# Step 10: Install Font Awesome (Pro with fallback to Free)
+echo "🎨 Installing Font Awesome..."
+FA_PRO=false
+
+# Check for Font Awesome Pro token (env var or global npmrc)
+if [ -n "$FONTAWESOME_NPM_AUTH_TOKEN" ]; then
+  echo "   Found FONTAWESOME_NPM_AUTH_TOKEN, configuring Pro access..."
+  cat > .npmrc << EOF
+@fortawesome:registry=https://npm.fontawesome.com/
+//npm.fontawesome.com/:_authToken=${FONTAWESOME_NPM_AUTH_TOKEN}
+EOF
+  FA_PRO=true
+elif grep -q "npm.fontawesome.com" ~/.npmrc 2>/dev/null; then
+  echo "   Found Font Awesome Pro in global npmrc..."
+  FA_PRO=true
+fi
+
+if [ "$FA_PRO" = true ]; then
+  npm install @fortawesome/fontawesome-svg-core \
+    @fortawesome/pro-solid-svg-icons \
+    @fortawesome/pro-regular-svg-icons \
+    @fortawesome/pro-light-svg-icons \
+    @fortawesome/pro-duotone-svg-icons \
+    @fortawesome/sharp-solid-svg-icons \
+    @fortawesome/sharp-regular-svg-icons \
+    @fortawesome/react-fontawesome
+  if [ $? -eq 0 ]; then
+    echo "   ✓ Font Awesome Pro installed (all icon styles)"
+    # Replace .npmrc with deployment-ready version (env var reference, not actual token)
+    cat > .npmrc << 'NPMRC_EOF'
+@fortawesome:registry=https://npm.fontawesome.com/
+//npm.fontawesome.com/:_authToken=${FONTAWESOME_NPM_AUTH_TOKEN}
+NPMRC_EOF
+    echo "   ✓ .npmrc created (deployment-ready with env var reference)"
+  else
+    echo "   ⚠ Pro install failed, falling back to Free..."
+    FA_PRO=false
+    rm -f .npmrc  # Remove invalid npmrc
+  fi
+fi
+
+if [ "$FA_PRO" = false ]; then
+  echo "   Installing Font Awesome Free..."
+  npm install @fortawesome/fontawesome-svg-core \
+    @fortawesome/free-solid-svg-icons \
+    @fortawesome/free-regular-svg-icons \
+    @fortawesome/free-brands-svg-icons \
+    @fortawesome/react-fontawesome
+  echo "   ✓ Font Awesome Free installed"
+  echo ""
+  echo "   💡 To enable Pro icons, set FONTAWESOME_NPM_AUTH_TOKEN in ~/.zshrc"
+  echo "      Get your token: https://fontawesome.com/account/general"
+fi
+
+# Step 11: Create ThemeProvider for Vite (not next-themes)
+echo "🎨 Creating theme provider..."
+mkdir -p src/components
+cat > src/components/theme-provider.tsx << 'EOF'
+import { createContext, useContext, useEffect, useState } from "react"
+
+type Theme = "dark" | "light" | "system"
+
+type ThemeProviderProps = {
+  children: React.ReactNode
+  defaultTheme?: Theme
+  storageKey?: string
+}
+
+type ThemeProviderState = {
+  theme: Theme
+  setTheme: (theme: Theme) => void
+}
+
+const initialState: ThemeProviderState = {
+  theme: "system",
+  setTheme: () => null,
+}
+
+const ThemeProviderContext = createContext<ThemeProviderState>(initialState)
+
+export function ThemeProvider({
+  children,
+  defaultTheme = "system",
+  storageKey = "vite-ui-theme",
+  ...props
+}: ThemeProviderProps) {
+  const [theme, setTheme] = useState<Theme>(
+    () => (localStorage.getItem(storageKey) as Theme) || defaultTheme
+  )
+
+  useEffect(() => {
+    const root = window.document.documentElement
+
+    root.classList.remove("light", "dark")
+
+    if (theme === "system") {
+      const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
+        .matches
+        ? "dark"
+        : "light"
+      root.classList.add(systemTheme)
+      return
+    }
+
+    root.classList.add(theme)
+  }, [theme])
+
+  const value = {
+    theme,
+    setTheme: (theme: Theme) => {
+      localStorage.setItem(storageKey, theme)
+      setTheme(theme)
+    },
+  }
+
+  return (
+    <ThemeProviderContext.Provider {...props} value={value}>
+      {children}
+    </ThemeProviderContext.Provider>
+  )
+}
+
+export const useTheme = () => {
+  const context = useContext(ThemeProviderContext)
+
+  if (context === undefined)
+    throw new Error("useTheme must be used within a ThemeProvider")
+
+  return context
+}
+EOF
+echo "   ✓ src/components/theme-provider.tsx created"
+
+# Step 12: Create ModeToggle component (use correct FA package based on license)
+if [ "$FA_PRO" = true ]; then
+  FA_IMPORT='import { faSunBright, faMoonStars } from "@fortawesome/pro-solid-svg-icons"'
+  FA_SUN_ICON="faSunBright"
+  FA_MOON_ICON="faMoonStars"
+else
+  FA_IMPORT='import { faSun, faMoon } from "@fortawesome/free-solid-svg-icons"'
+  FA_SUN_ICON="faSun"
+  FA_MOON_ICON="faMoon"
+fi
+
+cat > src/components/mode-toggle.tsx << EOF
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
+${FA_IMPORT}
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { useTheme } from "@/components/theme-provider"
+
+export function ModeToggle() {
+  const { setTheme } = useTheme()
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="default" size="icon">
+          <FontAwesomeIcon
+            icon={${FA_SUN_ICON}}
+            className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0"
+          />
+          <FontAwesomeIcon
+            icon={${FA_MOON_ICON}}
+            className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100"
+          />
+          <span className="sr-only">Toggle theme</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={() => setTheme("light")}>
+          Light
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setTheme("dark")}>
+          Dark
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setTheme("system")}>
+          System
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+EOF
+echo "   ✓ src/components/mode-toggle.tsx created"
+
+# Step 13: Create base Zustand store
+echo "📦 Creating Zustand store..."
+mkdir -p src/stores
+cat > src/stores/index.ts << 'EOF'
+import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
+
+interface AppState {
+  // UI State
+  sidebarOpen: boolean
+  setSidebarOpen: (open: boolean) => void
+  toggleSidebar: () => void
+}
+
+export const useAppStore = create<AppState>()(
+  persist(
+    (set) => ({
+      sidebarOpen: true,
+      setSidebarOpen: (open) => set({ sidebarOpen: open }),
+      toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+    }),
+    { name: 'app-storage' }
+  )
+)
+EOF
+echo "   ✓ src/stores/index.ts created"
+
+# Step 14: Create layout components directory
+mkdir -p src/components/layout src/components/brand
+
+# Step 15: Create Marek Health brand icon
+cat > src/components/brand/MarekLogoIcon.tsx << 'EOF'
+// MarekLogoIcon - Marek Health brand icon from Figma design system
+// Usage: <MarekLogoIcon className="size-6" /> or <MarekLogoIcon className="size-6 text-[#BB433C]" />
+
+interface MarekLogoIconProps {
+  className?: string
+}
+
+export function MarekLogoIcon({ className }: MarekLogoIconProps) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path d="M17.5022 10.5614L12.034 13.5545C12.034 13.5545 11.9862 13.5682 11.9658 13.5545L6.49776 10.5614C6.45003 10.5341 6.39538 10.5682 6.39538 10.6228V15.6273C6.39538 15.6273 6.40905 15.675 6.42951 15.6886L11.9658 18.8864C11.9658 18.8864 12.0136 18.9 12.034 18.8864L17.5705 15.6886C17.5705 15.6886 17.6045 15.6545 17.6045 15.6273V10.6228C17.6045 10.5682 17.55 10.5341 17.5022 10.5614ZM16.5136 15.2114L12.3954 17.5023C12.3409 17.5295 12.2863 17.5432 12.225 17.5432C12.1022 17.5432 11.9864 17.4818 11.9182 17.3659C11.8227 17.1955 11.8841 16.9841 12.0545 16.8886L16.1727 14.5977C16.3432 14.5023 16.5545 14.5637 16.65 14.7341C16.7454 14.9046 16.6841 15.1159 16.5136 15.2114ZM11.9999 0C5.37263 0 0 5.37278 0 12C0 18.6273 5.37263 24 11.9999 24C18.6272 24 24 18.6273 24 12C24 5.37278 18.6272 0 11.9999 0ZM6.47728 7.61592L11.9658 4.44546C11.9658 4.44546 12.0136 4.43182 12.034 4.44546L17.5159 7.6091C17.5636 7.63637 17.5636 7.70458 17.5159 7.72504L16.4795 8.29092C16.4795 8.29092 16.4317 8.30455 16.4113 8.29092L12.034 5.7614C12.034 5.7614 11.9862 5.74777 11.9658 5.7614L7.58174 8.29092C7.58174 8.29092 7.53411 8.30455 7.51366 8.29092L6.47728 7.72504C6.42955 7.69776 6.42955 7.63637 6.47728 7.6091V7.61592ZM18.7432 16.2818C18.7432 16.2818 18.7295 16.3296 18.7091 16.3432L12.034 20.1954C12.034 20.1954 11.9862 20.209 11.9658 20.1954L5.29092 16.3432C5.29092 16.3432 5.2568 16.3091 5.2568 16.2818V8.69316C5.2568 8.63862 5.31128 8.60455 5.35901 8.63182L11.9658 12.2523C11.9658 12.2523 12.0136 12.2659 12.034 12.2523L18.6408 8.625C18.6886 8.59773 18.7432 8.63188 18.7432 8.68642V16.2818Z" />
+    </svg>
+  )
+}
+EOF
+echo "   ✓ src/components/brand/MarekLogoIcon.tsx created"
+
+# Step 16: Create brand barrel export
+cat > src/components/brand/index.ts << 'EOF'
+export { MarekLogoIcon } from "./MarekLogoIcon"
+EOF
+echo "   ✓ src/components/brand/index.ts created"
+
+echo ""
+echo "✅ Project $PROJECT_NAME created successfully!"
+echo ""
+echo "📁 Structure:"
+echo "   src/components/ui/       - shadcn components"
+echo "   src/components/layout/   - layout components (add RootLayout, AppLayout)"
+echo "   src/components/brand/    - brand assets (MarekLogoIcon included)"
+echo "   src/components/          - theme-provider, mode-toggle"
+echo "   src/stores/              - Zustand stores"
+echo "   src/lib/utils.ts         - shadcn utilities"
+echo ""
+echo "📦 Included:"
+echo "   - Tailwind CSS v4"
+echo "   - shadcn/ui (all components)"
+echo "   - Zustand (state management)"
+echo "   - TanStack Router (routing)"
+echo "   - TanStack Table (DataTable with sorting/filtering/pagination)"
+echo "   - Font Awesome"
+echo "   - ThemeProvider + ModeToggle"
+echo ""
+echo "To start developing:"
+echo "  cd $PROJECT_NAME"
+echo "  npm run dev"
+echo ""

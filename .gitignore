@@ -1,0 +1,8 @@
+node_modules
+dist
+.env
+
+# Debug/test artifacts
+cli/debug-*.json
+cli/api-audit/
+cli/src/assets/*.svg

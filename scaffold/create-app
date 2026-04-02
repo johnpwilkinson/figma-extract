@@ -1,0 +1,409 @@
+#!/bin/bash
+# create-app - Spin up a fully configured React project with shadcn/ui, Tailwind, TanStack, and figma-extract
+# Usage: create-app <project-name> [--next]
+
+set -e
+
+PROJECT_NAME="${1:-}"
+USE_NEXT=false
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TEMPLATES_DIR="$SCRIPT_DIR/templates"
+
+# Parse flags
+for arg in "$@"; do
+  case $arg in
+    --next) USE_NEXT=true ;;
+  esac
+done
+
+if [ -z "$PROJECT_NAME" ] || [[ "$PROJECT_NAME" == --* ]]; then
+  echo "Usage: create-app <project-name> [--next]"
+  echo ""
+  echo "Options:"
+  echo "  --next    Use Next.js instead of Vite (default: Vite)"
+  exit 1
+fi
+
+if [ -d "$PROJECT_NAME" ]; then
+  echo "Error: Directory '$PROJECT_NAME' already exists"
+  exit 1
+fi
+
+# Check for bun
+if ! command -v bun &> /dev/null; then
+  echo "Error: Bun is required. Install it: curl -fsSL https://bun.sh/install | bash"
+  exit 1
+fi
+
+# ===== CREATE PROJECT =====
+
+if [ "$USE_NEXT" = true ]; then
+  echo "Creating $PROJECT_NAME with Next.js + TypeScript + shadcn/ui..."
+  bunx --bun create-next-app@latest "$PROJECT_NAME" \
+    --typescript --tailwind --eslint --app --src-dir \
+    --import-alias "@/*" --use-bun --yes
+else
+  echo "Creating $PROJECT_NAME with Vite + React + TypeScript + shadcn/ui..."
+  bun create vite "$PROJECT_NAME" --template react-swc-ts
+fi
+
+cd "$PROJECT_NAME"
+
+# ===== INSTALL DEPENDENCIES =====
+
+echo "Installing dependencies..."
+
+if [ "$USE_NEXT" = true ]; then
+  bun add zustand @tanstack/react-table
+else
+  bun add tailwindcss @tailwindcss/vite zustand @tanstack/react-router @tanstack/react-table
+  bun add -d @types/node
+
+  # Vite config with Tailwind plugin and path alias
+  cat > vite.config.ts << 'VITEEOF'
+import path from "path"
+import tailwindcss from "@tailwindcss/vite"
+import react from "@vitejs/plugin-react-swc"
+import { defineConfig } from "vite"
+
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+    },
+  },
+})
+VITEEOF
+
+  # tsconfig with path aliases
+  cat > tsconfig.json << 'TSCEOF'
+{
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ],
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  }
+}
+TSCEOF
+
+  # Update tsconfig.app.json with path aliases
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    sed -i '' 's/"compilerOptions": {/"compilerOptions": {\n    "baseUrl": ".",\n    "paths": { "@\/*": [".\/src\/*"] },/' tsconfig.app.json
+  else
+    sed -i 's/"compilerOptions": {/"compilerOptions": {\n    "baseUrl": ".",\n    "paths": { "@\/*": [".\/src\/*"] },/' tsconfig.app.json
+  fi
+
+  # Tailwind import
+  cat > src/index.css << 'CSSEOF'
+@import "tailwindcss";
+CSSEOF
+fi
+
+echo "   Done"
+
+# ===== SHADCN INIT + ALL COMPONENTS =====
+
+echo "Initializing shadcn/ui..."
+bunx --bun shadcn@latest init --defaults --yes
+
+# Inject registries
+echo "Injecting shadcn registries..."
+REGISTRIES_URL="https://ui.shadcn.com/r/registries.json"
+EXCLUDE_PAID='["@clerk","@algolia","@shadcnui-blocks","@uselayouts","@gooseui","@zippystarter","@lytenyte"]'
+
+REGISTRIES=$(curl -s "$REGISTRIES_URL" | jq --argjson exclude "$EXCLUDE_PAID" '
+  [.[] | select(.name as $n | $exclude | index($n) | not)] |
+  reduce .[] as $r ({}; . + {($r.name): $r.url})
+' 2>/dev/null)
+
+if [ -n "$REGISTRIES" ] && [ "$REGISTRIES" != "null" ]; then
+  jq --argjson regs "$REGISTRIES" '. + {registries: $regs}' components.json > components.json.tmp && \
+    mv components.json.tmp components.json
+  REGISTRY_COUNT=$(echo "$REGISTRIES" | jq 'keys | length')
+  echo "   Injected $REGISTRY_COUNT registries"
+fi
+
+echo "Installing all shadcn components..."
+bunx --bun shadcn@latest add --all --yes
+
+# ===== FONT AWESOME =====
+
+echo "Installing Font Awesome..."
+FA_PRO=false
+
+if [ -n "$FONTAWESOME_NPM_AUTH_TOKEN" ]; then
+  echo "   Found FONTAWESOME_NPM_AUTH_TOKEN, configuring Pro..."
+  cat > .npmrc << NPMRCEOF
+@fortawesome:registry=https://npm.fontawesome.com/
+//npm.fontawesome.com/:_authToken=${FONTAWESOME_NPM_AUTH_TOKEN}
+NPMRCEOF
+  FA_PRO=true
+elif grep -q "npm.fontawesome.com" ~/.npmrc 2>/dev/null; then
+  echo "   Found Font Awesome Pro in global npmrc..."
+  FA_PRO=true
+fi
+
+if [ "$FA_PRO" = true ]; then
+  bun add @fortawesome/fontawesome-svg-core \
+    @fortawesome/pro-solid-svg-icons \
+    @fortawesome/pro-regular-svg-icons \
+    @fortawesome/pro-light-svg-icons \
+    @fortawesome/pro-duotone-svg-icons \
+    @fortawesome/sharp-solid-svg-icons \
+    @fortawesome/sharp-regular-svg-icons \
+    @fortawesome/react-fontawesome
+  if [ $? -eq 0 ]; then
+    echo "   Font Awesome Pro installed"
+    cat > .npmrc << 'NPMRCEOF2'
+@fortawesome:registry=https://npm.fontawesome.com/
+//npm.fontawesome.com/:_authToken=${FONTAWESOME_NPM_AUTH_TOKEN}
+NPMRCEOF2
+  else
+    echo "   Pro install failed, falling back to Free..."
+    FA_PRO=false
+    rm -f .npmrc
+  fi
+fi
+
+if [ "$FA_PRO" = false ]; then
+  bun add @fortawesome/fontawesome-svg-core \
+    @fortawesome/free-solid-svg-icons \
+    @fortawesome/free-regular-svg-icons \
+    @fortawesome/free-brands-svg-icons \
+    @fortawesome/react-fontawesome
+  echo "   Font Awesome Free installed"
+fi
+
+# ===== THEME PROVIDER =====
+
+echo "Creating theme provider..."
+mkdir -p src/components
+
+if [ "$USE_NEXT" = true ]; then
+  # Next.js uses next-themes
+  bun add next-themes
+  echo "   next-themes installed (use <ThemeProvider> from next-themes in layout.tsx)"
+else
+  # Vite uses custom ThemeProvider
+  cat > src/components/theme-provider.tsx << 'TPEOF'
+import { createContext, useContext, useEffect, useState } from "react"
+
+type Theme = "dark" | "light" | "system"
+
+type ThemeProviderProps = {
+  children: React.ReactNode
+  defaultTheme?: Theme
+  storageKey?: string
+}
+
+type ThemeProviderState = {
+  theme: Theme
+  setTheme: (theme: Theme) => void
+}
+
+const initialState: ThemeProviderState = {
+  theme: "system",
+  setTheme: () => null,
+}
+
+const ThemeProviderContext = createContext<ThemeProviderState>(initialState)
+
+export function ThemeProvider({
+  children,
+  defaultTheme = "system",
+  storageKey = "vite-ui-theme",
+  ...props
+}: ThemeProviderProps) {
+  const [theme, setTheme] = useState<Theme>(
+    () => (localStorage.getItem(storageKey) as Theme) || defaultTheme
+  )
+
+  useEffect(() => {
+    const root = window.document.documentElement
+    root.classList.remove("light", "dark")
+    if (theme === "system") {
+      const systemTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+      root.classList.add(systemTheme)
+      return
+    }
+    root.classList.add(theme)
+  }, [theme])
+
+  const value = {
+    theme,
+    setTheme: (theme: Theme) => {
+      localStorage.setItem(storageKey, theme)
+      setTheme(theme)
+    },
+  }
+
+  return (
+    <ThemeProviderContext.Provider {...props} value={value}>
+      {children}
+    </ThemeProviderContext.Provider>
+  )
+}
+
+export const useTheme = () => {
+  const context = useContext(ThemeProviderContext)
+  if (context === undefined)
+    throw new Error("useTheme must be used within a ThemeProvider")
+  return context
+}
+TPEOF
+  echo "   src/components/theme-provider.tsx created"
+fi
+
+# ===== MODE TOGGLE =====
+
+if [ "$FA_PRO" = true ]; then
+  FA_IMPORT='import { faSunBright, faMoonStars } from "@fortawesome/pro-solid-svg-icons"'
+  FA_SUN="faSunBright"
+  FA_MOON="faMoonStars"
+else
+  FA_IMPORT='import { faSun, faMoon } from "@fortawesome/free-solid-svg-icons"'
+  FA_SUN="faSun"
+  FA_MOON="faMoon"
+fi
+
+if [ "$USE_NEXT" = true ]; then
+  THEME_IMPORT='import { useTheme } from "next-themes"'
+else
+  THEME_IMPORT='import { useTheme } from "@/components/theme-provider"'
+fi
+
+cat > src/components/mode-toggle.tsx << MTEOF
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
+${FA_IMPORT}
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+${THEME_IMPORT}
+
+export function ModeToggle() {
+  const { setTheme } = useTheme()
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="default" size="icon">
+          <FontAwesomeIcon icon={${FA_SUN}} className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+          <FontAwesomeIcon icon={${FA_MOON}} className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+          <span className="sr-only">Toggle theme</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={() => setTheme("light")}>Light</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setTheme("dark")}>Dark</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setTheme("system")}>System</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+MTEOF
+echo "   src/components/mode-toggle.tsx created"
+
+# ===== ZUSTAND STORE =====
+
+mkdir -p src/stores
+cat > src/stores/index.ts << 'STEOF'
+import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
+
+interface AppState {
+  sidebarOpen: boolean
+  setSidebarOpen: (open: boolean) => void
+  toggleSidebar: () => void
+}
+
+export const useAppStore = create<AppState>()(
+  persist(
+    (set) => ({
+      sidebarOpen: true,
+      setSidebarOpen: (open) => set({ sidebarOpen: open }),
+      toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+    }),
+    { name: 'app-storage' }
+  )
+)
+STEOF
+echo "   src/stores/index.ts created"
+
+# ===== BRAND + LAYOUT DIRS =====
+
+mkdir -p src/components/layout src/components/brand
+
+cat > src/components/brand/MarekLogoIcon.tsx << 'LOGOEOF'
+interface MarekLogoIconProps {
+  className?: string
+}
+
+export function MarekLogoIcon({ className }: MarekLogoIconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+      <path d="M17.5022 10.5614L12.034 13.5545C12.034 13.5545 11.9862 13.5682 11.9658 13.5545L6.49776 10.5614C6.45003 10.5341 6.39538 10.5682 6.39538 10.6228V15.6273C6.39538 15.6273 6.40905 15.675 6.42951 15.6886L11.9658 18.8864C11.9658 18.8864 12.0136 18.9 12.034 18.8864L17.5705 15.6886C17.5705 15.6886 17.6045 15.6545 17.6045 15.6273V10.6228C17.6045 10.5682 17.55 10.5341 17.5022 10.5614ZM16.5136 15.2114L12.3954 17.5023C12.3409 17.5295 12.2863 17.5432 12.225 17.5432C12.1022 17.5432 11.9864 17.4818 11.9182 17.3659C11.8227 17.1955 11.8841 16.9841 12.0545 16.8886L16.1727 14.5977C16.3432 14.5023 16.5545 14.5637 16.65 14.7341C16.7454 14.9046 16.6841 15.1159 16.5136 15.2114ZM11.9999 0C5.37263 0 0 5.37278 0 12C0 18.6273 5.37263 24 11.9999 24C18.6272 24 24 18.6273 24 12C24 5.37278 18.6272 0 11.9999 0ZM6.47728 7.61592L11.9658 4.44546C11.9658 4.44546 12.0136 4.43182 12.034 4.44546L17.5159 7.6091C17.5636 7.63637 17.5636 7.70458 17.5159 7.72504L16.4795 8.29092C16.4795 8.29092 16.4317 8.30455 16.4113 8.29092L12.034 5.7614C12.034 5.7614 11.9862 5.74777 11.9658 5.7614L7.58174 8.29092C7.58174 8.29092 7.53411 8.30455 7.51366 8.29092L6.47728 7.72504C6.42955 7.69776 6.42955 7.63637 6.47728 7.6091V7.61592ZM18.7432 16.2818C18.7432 16.2818 18.7295 16.3296 18.7091 16.3432L12.034 20.1954C12.034 20.1954 11.9862 20.209 11.9658 20.1954L5.29092 16.3432C5.29092 16.3432 5.2568 16.3091 5.2568 16.2818V8.69316C5.2568 8.63862 5.31128 8.60455 5.35901 8.63182L11.9658 12.2523C11.9658 12.2523 12.0136 12.2659 12.034 12.2523L18.6408 8.625C18.6886 8.59773 18.7432 8.63188 18.7432 8.68642V16.2818Z" />
+    </svg>
+  )
+}
+LOGOEOF
+
+cat > src/components/brand/index.ts << 'BEOF'
+export { MarekLogoIcon } from "./MarekLogoIcon"
+BEOF
+
+# ===== FIGMA-EXTRACT INTEGRATION =====
+
+echo "Setting up figma-extract integration..."
+
+# Project-level .figma-extract.json
+if [ -f "$TEMPLATES_DIR/figma-extract.json" ]; then
+  cp "$TEMPLATES_DIR/figma-extract.json" .figma-extract.json
+  echo "   .figma-extract.json created"
+fi
+
+# Project-level Claude Code skill
+mkdir -p .claude/commands
+if [ -f "$TEMPLATES_DIR/claude-commands/figma-extract.md" ]; then
+  cp "$TEMPLATES_DIR/claude-commands/figma-extract.md" .claude/commands/figma-extract.md
+  echo "   .claude/commands/figma-extract.md installed"
+fi
+
+echo ""
+echo "Done! Project $PROJECT_NAME created."
+echo ""
+echo "Structure:"
+echo "  src/components/ui/       shadcn components (all installed)"
+echo "  src/components/layout/   layout components"
+echo "  src/components/brand/    brand assets (MarekLogoIcon)"
+echo "  src/components/          theme-provider, mode-toggle"
+echo "  src/stores/              Zustand stores"
+echo "  .figma-extract.json      figma-extract CLI config"
+echo "  .claude/commands/        figma-extract skill (use /figma-extract)"
+echo ""
+echo "Stack:"
+if [ "$USE_NEXT" = true ]; then
+  echo "  Next.js + TypeScript + Tailwind CSS v4"
+else
+  echo "  Vite + React + TypeScript + Tailwind CSS v4"
+fi
+echo "  shadcn/ui (all components)"
+echo "  TanStack Table"
+echo "  Zustand"
+echo "  Font Awesome $([ "$FA_PRO" = true ] && echo "Pro" || echo "Free")"
+echo ""
+echo "To start:"
+echo "  cd $PROJECT_NAME && bun dev"
+echo ""
+echo "To use figma-extract:"
+echo "  /figma-extract <figma-url>"
