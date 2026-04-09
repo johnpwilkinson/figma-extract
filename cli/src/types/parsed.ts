@@ -7,9 +7,6 @@ export interface TailwindResolved {
 export interface ParsedColor {
   hex: string;
   tw: TailwindResolved;
-  semanticToken?: string; // e.g. "foreground", "muted-foreground", "destructive"
-  figmaVar?: string;      // e.g. "Text/dark", "Text/subtitle/light"
-  cssMismatch?: boolean;  // true if Figma value differs from project CSS variable
 }
 
 export type ParsedNodeType =
@@ -83,6 +80,7 @@ export interface ParsedInstance extends ParsedNodeBase {
   opacity?: number;
   width?: string;
   height?: string;
+  assetPath?: string;
   children?: ParsedNode[];
 }
 

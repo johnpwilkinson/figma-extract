@@ -29,8 +29,8 @@ const TW_COLORS: Record<string, string> = {
   "#1f2937": "gray-800",
   "#111827": "gray-900",
   "#030712": "gray-950",
-  // zinc
-  "#fafafa": "zinc-50",
+  // zinc (note: #fafafa overlaps with neutral-50 — neutral wins below)
+  // "#fafafa": "zinc-50",
   "#f4f4f5": "zinc-100",
   "#e4e4e7": "zinc-200",
   "#d4d4d8": "zinc-300",

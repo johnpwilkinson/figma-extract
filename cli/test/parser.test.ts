@@ -12,7 +12,6 @@ const fixture = heroFixture as unknown as FigmaFileNodesResponse;
 const nodeData = fixture.nodes["1:2"];
 
 const testConfig: FigmaExtractConfig = {
-  figmaToken: "test-token",
   defaults: { font: "Inter" },
   componentMap: {},
   iconLibrary: "lucide-react",

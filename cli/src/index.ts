@@ -12,7 +12,6 @@ import { loadConfig } from "./config";
 import { parseFigmaUrl, parseCliArgs, fetchFigmaNodes, fetchImageFills, fetchNodeScreenshot } from "./figma-api";
 import { walkTree, type WalkContext } from "./parser/index";
 import { formatTree } from "./formatter";
-import { detectShadcn, detectCssPath, readProjectCssVars } from "./resolvers/css-vars";
 import { collectExportableAssets, exportAssets, updateNodesWithAssetPaths } from "./asset-exporter";
 
 const HELP = `
@@ -32,7 +31,6 @@ Environment:
 Config:
   Place a .figma-extract.json in your project root to set defaults:
   {
-    "figmaToken": "...",       // alternative to FIGMA_TOKEN env var
     "defaults": { "font": "Inter" },
     "componentMap": { "MyButton": "shadcn/Button" },
     "iconLibrary": "lucide-react"
@@ -49,15 +47,14 @@ async function main() {
   }
 
   const jsonMode = args.includes("--json");
-  const darkMode = args.includes("--dark") || !args.includes("--light");
-  const filteredArgs = args.filter((a) => !["--json", "--dark", "--light"].includes(a));
+  const filteredArgs = args.filter((a) => a !== "--json");
 
   try {
     // Parse target
     const target = parseCliArgs(filteredArgs);
 
     // Load config
-    const config = loadConfig();
+    const config = await loadConfig();
 
     // Fetch from Figma API — nodes + image fills + screenshot in parallel
     const [response, imageFills, screenshotUrl] = await Promise.all([
@@ -83,32 +80,10 @@ async function main() {
 
     const rootNode = nodeData.document;
 
-    // Detect shadcn and project CSS
-    const useShadcn = detectShadcn();
-    if (useShadcn) {
-      console.error("[figma-extract] Detected shadcn project — using semantic token mapping");
-    }
-
-    const cssPath = detectCssPath();
-    let cssInfo = "";
-    if (cssPath) {
-      const vars = await readProjectCssVars(cssPath);
-      const mode = darkMode ? "dark" : "light";
-      const varCount = Object.keys(darkMode ? vars.dark : vars.light).length;
-      if (varCount > 0) {
-        cssInfo = " (" + varCount + " " + mode + " CSS vars from " + cssPath + ")";
-      }
-    }
-    if (cssInfo) {
-      console.error("[figma-extract] Project CSS loaded" + cssInfo);
-    }
-
     // Build walk context
     const ctx: WalkContext = {
       config,
       components: nodeData.components,
-      isDarkMode: darkMode,
-      useShadcn,
       imageFills,
     };
 

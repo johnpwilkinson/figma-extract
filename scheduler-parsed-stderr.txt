@@ -1,4 +1,0 @@
-[figma-extract] Resolved 76 image fill URLs
-[figma-extract] Screenshot: https://figma-alpha-api.s3.us-west-2.amazonaws.com/images/4cb3b84a-137d-49ce-a15d-3c1cc41d620a
-[figma-extract] Detected shadcn project — using semantic token mapping
-[figma-extract] Project CSS loaded (31 dark CSS vars from src/index.css)

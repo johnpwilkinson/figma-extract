@@ -8,15 +8,9 @@ import {
   resolveFirstSolidFill,
   resolveColor,
 } from "../resolvers/tailwind";
-import {
-  matchHexToSemanticRole,
-  semanticTokenToTailwind,
-} from "../resolvers/semantic-tokens";
 
 export interface TextExtractorConfig {
   defaultFont?: string;
-  isDarkMode?: boolean;
-  useShadcn?: boolean;
 }
 
 /** Extract a TEXT FigmaNode into a ParsedText. */
@@ -46,16 +40,6 @@ export function extractText(
   const color = nodeFills
     ? (resolveFirstSolidFill(nodeFills, "text") ?? fallbackBlack)
     : fallbackBlack;
-
-  // Try to match color to a semantic token if shadcn is detected
-  if (config.useShadcn && color.hex) {
-    const semantic = matchHexToSemanticRole(color.hex, config.isDarkMode ?? true);
-    if (semantic) {
-      color.semanticToken = semantic.token;
-      color.tw.tw = semanticTokenToTailwind(semantic.token, "text");
-      color.tw.exact = true;
-    }
-  }
 
   const align = (style?.textAlignHorizontal ?? "LEFT").toLowerCase();
 

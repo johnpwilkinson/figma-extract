@@ -13,7 +13,7 @@
 
 import { existsSync, mkdirSync } from "fs";
 import { resolve, join } from "path";
-import type { ParsedNode, ParsedIcon, ParsedShape, ParsedInstance } from "./types/parsed";
+import type { ParsedNode, ParsedIcon, ParsedInstance } from "./types/parsed";
 import { fetchSvgExports, downloadFile } from "./figma-api";
 import type { FigmaNode, FigmaComponentMeta } from "./types/figma-api";
 
@@ -148,10 +148,10 @@ export function updateNodesWithAssetPaths(
         (node as ParsedIcon).source = "asset:" + assetPaths[node.figmaId];
       } else if (node.type === "INSTANCE") {
         // Tag the instance so the formatter can show the asset path
-        (node as any).assetPath = assetPaths[node.figmaId];
+        (node as ParsedInstance).assetPath = assetPaths[node.figmaId];
       }
     }
-    for (const child of (node as any).children ?? []) {
+    for (const child of node.children ?? []) {
       walk(child);
     }
   }

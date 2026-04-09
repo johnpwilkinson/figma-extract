@@ -49,8 +49,7 @@ echo "      Installed to ~/.claude/commands/figma-extract.md"
 
 echo "[4/5] Installing create-app scaffold..."
 mkdir -p "$HOME/bin"
-cp "$SCAFFOLD_DIR/create-app" "$HOME/bin/create-app"
-chmod +x "$HOME/bin/create-app"
+ln -sf "$SCAFFOLD_DIR/create-app" "$HOME/bin/create-app"
 
 # Ensure ~/bin is in PATH
 if [[ ":$PATH:" != *":$HOME/bin:"* ]]; then
