@@ -21,14 +21,7 @@ function tw(resolved: TailwindResolved): string {
 }
 
 function colorStr(color: ParsedColor, prefix: string): string {
-  let str = prefix + ": " + color.hex + " → " + color.tw.tw;
-  if (color.semanticToken) {
-    str += " (token: --" + color.semanticToken + ")";
-  }
-  if (color.cssMismatch) {
-    str += " !! CSS mismatch — update project CSS";
-  }
-  return str;
+  return prefix + ": " + color.hex + " → " + color.tw.tw;
 }
 
 function formatText(node: ParsedText, level: number): string {
@@ -205,8 +198,8 @@ function formatInstance(
     }
   }
 
-  if ((node as any).assetPath) {
-    lines.push(p + "Asset: " + (node as any).assetPath);
+  if (node.assetPath) {
+    lines.push(p + "Asset: " + node.assetPath);
   } else if (node.isRemote) {
     lines.push(p + "Source: external library");
   }

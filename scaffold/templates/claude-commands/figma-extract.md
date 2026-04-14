@@ -5,7 +5,7 @@ description: Extract Figma design data via a local CLI and implement as producti
 
 # Figma Extract
 
-Turn Figma designs into production React components using a local CLI that extracts design data directly from the Figma REST API. The CLI produces a flat, structured spec with every property resolved to Tailwind classes and shadcn semantic tokens — optimized for accurate code generation without the detail loss that comes from nested MCP payloads.
+Turn Figma designs into production React components using a local CLI that extracts design data directly from the Figma REST API. The CLI produces a flat, structured spec with every property resolved to Tailwind classes — optimized for accurate code generation without the detail loss that comes from nested MCP payloads.
 
 ## Why this workflow exists
 
@@ -13,19 +13,39 @@ The Figma MCP server returns deeply nested data that causes details to slip thro
 
 ## Phase 1: Extract the design
 
-Run the CLI from within the target project directory (this matters — the CLI reads the project's `components.json` and CSS to enable semantic token mapping):
+Run the CLI from within the target project directory (this matters — the CLI reads `.figma-extract.json` for component mapping and icon library config):
 
 ```sh
 figma-extract "<figma-url>"
 ```
 
-Add `--dark` (default) or `--light` to match the frame's theme mode.
-
 The CLI makes three parallel API calls and outputs:
 - A `Screenshot:` URL at the top — view this first to understand the overall layout
 - A flat spec with every node's properties and Tailwind class mappings
 - `Asset:` paths for any brand SVGs it exported to `src/assets/`
-- Semantic token annotations like `(token: --foreground)` when it detects shadcn
+
+**What the CLI outputs for colors:** Every color appears as `hex → tailwind-class` (e.g., `#171717 → text-neutral-900`). These are raw values resolved against the default Tailwind palette. The CLI does NOT attempt to map colors to semantic tokens — that's your job in Phase 1.5 below.
+
+## Phase 1.5: Analyze the project's design system
+
+Before showing the user anything, read the project to understand its styling approach. This determines how you'll map the extracted colors to the project's actual tokens.
+
+**Check in this order:**
+
+1. **shadcn / CSS variable themes** — Look for `components.json` and read the project's global CSS file (`src/index.css`, `src/globals.css`, `src/app/globals.css`, or similar). If it contains CSS variables like `--background`, `--foreground`, `--primary`, etc., this is a CSS-variable-based theme. Read both the `:root` and `.dark` blocks to understand the full token set.
+
+2. **Tailwind config** — Check `tailwind.config.ts` or `tailwind.config.js` for custom theme extensions. The project may define semantic colors there (e.g., `primary: 'hsl(var(--primary))'`).
+
+3. **Other design systems** — Check `package.json` for MUI (`@mui/material`), Chakra (`@chakra-ui/react`), Mantine, or other component libraries. Each has its own theming approach.
+
+4. **No design system** — If none of the above, the project uses plain CSS/Tailwind with no semantic layer.
+
+**Build a mental color map.** For CSS-variable themes, convert each variable's value to hex (oklch values need approximate conversion) and match it against the colors in the extracted spec. For example:
+
+- Spec shows `#09090b → bg-zinc-950` and the project's `.dark` CSS has `--background: oklch(0.145 0 0)` which is approximately `#09090b` → this color maps to `bg-background`
+- Spec shows `#fafafa → text-neutral-50` and the project's `.dark` CSS has `--foreground: oklch(0.985 0 0)` which is approximately `#fafafa` → this color maps to `text-foreground`
+
+You will use this mapping when building the component in Phase 3.
 
 ## Phase 2: Offer collaborative planning
 
@@ -35,9 +55,9 @@ After the CLI output is ready, you MUST present the planning offer to the user B
 
 Present this offer to the user:
 
-> "I've extracted the design spec. Before I build, would you like to go over the plan together? I can walk you through what I'm going to build, which shadcn components I'll use, and ask a few questions about how this component should work in your app. Or I can just build it directly — your call."
+> "I've extracted the design spec. Before I build, would you like to go over the plan together? I can walk you through what I'm going to build, which components I'll use, how I'll map colors to your project's theme, and ask a few questions about how this component should work in your app. Or I can just build it directly — your call."
 
-**If the user declines (or says "just build it"):** Skip to Phase 2.5 (docs lookup) and then Phase 3, making reasonable default decisions (data-driven with a typed array, useState for local UI state, props interface for the data shape, shadcn components where available).
+**If the user declines (or says "just build it"):** Skip to Phase 2.5 (docs lookup) and then Phase 3, using the color mapping from Phase 1.5 and making reasonable default decisions (data-driven with a typed array, useState for local UI state, props interface for the data shape, project components where available).
 
 **If the user accepts:** Enter the collaborative planning flow below.
 
@@ -47,8 +67,8 @@ This follows the brainstorming pattern: one question at a time, multiple choice 
 
 **Step 1: Present the build summary.** In one concise message, describe:
 - What you see in the spec (e.g., "a data table with 10 rows, a filter toolbar, and pagination")
-- Which shadcn components you plan to use (Table, Button, Badge, Checkbox, Select, etc.)
-- The semantic tokens detected (foreground, muted-foreground, destructive, etc.)
+- Which components you plan to use (Table, Button, Badge, Checkbox, Select, etc.)
+- How you'll map the extracted colors to the project's tokens (present the mapping from Phase 1.5)
 - Any brand assets the CLI exported
 
 Ask: "Does this look right? Anything I'm misreading?"
@@ -80,18 +100,20 @@ The user's answer shapes everything: props interface vs internal state, onClick 
 **Step 6: Present the build plan.** Summarize what you're going to build in a short, scannable format:
 - Component name and file path
 - Props interface (if reusable)
-- shadcn components being used
+- Components being used (shadcn, MUI, custom, etc.)
+- Color/token mapping strategy
 - State management approach
 - Interactive behaviors being wired
-- Any CSS variable updates needed
 
 Ask: "Good to build?"
 
 Then proceed to Phase 3.
 
-## Phase 2.5: Read the docs for every shadcn component in the build
+## Phase 2.5: Read the docs for every component in the build
 
-This step is mandatory regardless of whether the user went through collaborative planning or skipped it. For EVERY shadcn component identified in the spec, look up its documentation before writing code. The visual spec tells you WHAT to render; the component docs tell you HOW to make it work — controlled state patterns, required providers, composition sub-components, and the underlying library's API.
+This step is mandatory regardless of whether the user went through collaborative planning or skipped it. For EVERY component library component identified in the spec, look up its documentation before writing code. The visual spec tells you WHAT to render; the component docs tell you HOW to make it work — controlled state patterns, required providers, composition sub-components, and the underlying library's API.
+
+### For shadcn projects
 
 **A full component reference is bundled at `shadcn-component-reference.md`** in the figma-extract directory. Read it first for a quick overview of every component's key patterns and the implementation detail you'd miss from the visual design alone. Then look up the full docs for each component you're about to use.
 
@@ -114,15 +136,22 @@ This step is mandatory regardless of whether the user went through collaborative
 - **Toast is deprecated** — use Sonner's imperative `toast()` function instead.
 - **Pagination has no built-in state** — you manage current page yourself.
 
-This is not optional. Every shadcn component in the build must be looked up. The 27 extra lines of code that make a component actually work come from the docs, not from the Figma spec.
+### For other component libraries
+
+If the project uses MUI, Chakra, Mantine, or another library, look up the relevant component documentation using context7, web fetch, or your training data. The same principle applies: the spec tells you what to render, the docs tell you how.
+
+This is not optional. Every component in the build must be looked up. The 27 extra lines of code that make a component actually work come from the docs, not from the Figma spec.
 
 ## Phase 3: Build the component
 
-Work through the spec from top to bottom, informed by the planning phase (or defaults if skipped) and the component documentation you just read.
+Work through the spec from top to bottom, informed by the planning phase (or defaults if skipped), the color mapping from Phase 1.5, and the component documentation you just read.
 
-**Use the project's real components.** Scan `src/components/ui/` for available shadcn primitives before writing code. When the spec shows `INSTANCE: ... -> shadcn/Button`, use the real `<Button>` component. When the pattern is recognizable but not explicitly tagged (repeating list → Table, pill with text → Badge, clickable element → Button, toggle → Checkbox, dropdown → Select), use the appropriate component.
+**Use the project's real components.** Scan the project for available UI primitives before writing code. When the spec shows `INSTANCE: ... -> shadcn/Button`, use the real `<Button>` component. When the pattern is recognizable but not explicitly tagged (repeating list → Table, pill with text → Badge, clickable element → Button, toggle → Checkbox, dropdown → Select), use the appropriate component.
 
-**Use semantic color tokens.** When the CLI annotates a color with `(token: --foreground)`, use the semantic class (`text-foreground`, `bg-background`, `border-border`). This makes the component theme-aware — it adapts to light/dark mode via CSS variables. If the CLI flags `!! CSS mismatch`, update the project's global CSS to match the Figma value before using the semantic token.
+**Map colors to the project's tokens.** Use the color mapping you built in Phase 1.5:
+- For CSS-variable themes: use semantic classes (`text-foreground`, `bg-background`, `border-border`). This makes the component theme-aware — it adapts to light/dark mode via CSS variables.
+- For Tailwind-only projects: use the Tailwind classes from the spec directly (`text-neutral-900`, `bg-zinc-950`).
+- For other design systems: use the system's theming API (e.g., MUI's `sx={{ color: 'text.primary' }}`).
 
 **Handle assets.** Import brand SVGs from `src/assets/` where the CLI shows `Asset:` paths. For image fills with `URL:` fields, use `<img>` tags. For unresolved `Ref:` fields, use a placeholder.
 
@@ -140,8 +169,8 @@ Work through the spec from top to bottom, informed by the planning phase (or def
 ## What NOT to do
 
 - Do not use the Figma MCP server. The CLI output replaces it.
-- Do not hardcode colors when semantic tokens are available.
-- Do not recreate shadcn primitives from raw HTML divs.
+- Do not hardcode hex colors when semantic tokens are available in the project.
+- Do not recreate UI library primitives from raw HTML divs.
 - Do not skip sections of the spec.
 - Do not invent values — ask the user if something is ambiguous.
 
@@ -149,5 +178,4 @@ Work through the spec from top to bottom, informed by the planning phase (or def
 
 - **CLI not found:** Run the installer again (`./install.sh` from the mh-figma-extract-kit repo) or manually: `cd <kit-repo>/cli && bun link`
 - **Auth failure:** Ensure `FIGMA_TOKEN` is set in the environment
-- **Wrong colors:** Run from the project directory so the CLI detects `components.json` and CSS vars
 - **Missing details:** Check `.figma-extract.json` in the project root for config

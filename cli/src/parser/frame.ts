@@ -4,7 +4,7 @@
  */
 
 import type { FigmaNode } from "../types/figma-api";
-import type { ParsedFrame, ParsedColor } from "../types/parsed";
+import type { ParsedFrame } from "../types/parsed";
 import {
   resolveSpacing,
   resolveBorderRadius,
@@ -13,30 +13,6 @@ import {
   resolvePadding,
   resolveFirstSolidFill,
 } from "../resolvers/tailwind";
-import {
-  matchHexToSemanticRole,
-  semanticTokenToTailwind,
-} from "../resolvers/semantic-tokens";
-
-export interface FrameExtractorConfig {
-  isDarkMode?: boolean;
-  useShadcn?: boolean;
-}
-
-function enrichColorWithSemantic(
-  color: ParsedColor | undefined,
-  prefix: string,
-  config: FrameExtractorConfig,
-): ParsedColor | undefined {
-  if (!color || !config.useShadcn) return color;
-  const semantic = matchHexToSemanticRole(color.hex, config.isDarkMode ?? true);
-  if (semantic) {
-    color.semanticToken = semantic.token;
-    color.tw.tw = semanticTokenToTailwind(semantic.token, prefix);
-    color.tw.exact = true;
-  }
-  return color;
-}
 
 /** Map Figma primary-axis alignment → CSS-style keyword */
 function mapPrimaryAlign(v?: string): string {
@@ -81,8 +57,7 @@ function resolveSizing(
   }
 }
 
-export function extractFrame(node: FigmaNode, config?: FrameExtractorConfig): ParsedFrame {
-  const cfg = config ?? {};
+export function extractFrame(node: FigmaNode): ParsedFrame {
   const hasAutoLayout = node.layoutMode === "HORIZONTAL" || node.layoutMode === "VERTICAL";
 
   const top = node.paddingTop ?? 0;
@@ -118,17 +93,13 @@ export function extractFrame(node: FigmaNode, config?: FrameExtractorConfig): Pa
 
   // Fills
   if (node.fills?.length) {
-    const fill = enrichColorWithSemantic(
-      resolveFirstSolidFill(node.fills, "bg"), "bg", cfg
-    );
+    const fill = resolveFirstSolidFill(node.fills, "bg");
     if (fill) frame.fill = fill;
   }
 
   // Strokes
   if (node.strokes?.length) {
-    const stroke = enrichColorWithSemantic(
-      resolveFirstSolidFill(node.strokes, "border"), "border", cfg
-    );
+    const stroke = resolveFirstSolidFill(node.strokes, "border");
     if (stroke) frame.stroke = stroke;
     if (node.strokeWeight) frame.strokeWeight = node.strokeWeight;
   }

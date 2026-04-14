@@ -15,8 +15,6 @@ import { extractShape } from "./shape";
 export interface WalkContext {
   config: FigmaExtractConfig;
   components: Record<string, FigmaComponentMeta>;
-  isDarkMode?: boolean;
-  useShadcn?: boolean;
   imageFills?: Record<string, string>; // imageRef hash → URL
 }
 
@@ -58,8 +56,6 @@ function walkNode(
   if (node.type === "TEXT") {
     const textConfig: TextExtractorConfig = {
       defaultFont: ctx.config.defaults?.font,
-      isDarkMode: ctx.isDarkMode,
-      useShadcn: ctx.useShadcn,
     };
     return extractText(node, textConfig);
   }
@@ -84,7 +80,7 @@ function walkNode(
 
   if (VECTOR_TYPES.has(node.type)) {
     const vectorOpts: VectorExtractOptions = {
-      iconLibrary: ctx.config.iconLibrary,
+      iconLibrary: ctx.config.iconLibrary ?? "lucide-react",
     };
     return extractVector(node, vectorOpts);
   }
@@ -94,7 +90,7 @@ function walkNode(
   }
 
   if (FRAME_TYPES.has(node.type)) {
-    const frame = extractFrame(node, { isDarkMode: ctx.isDarkMode, useShadcn: ctx.useShadcn });
+    const frame = extractFrame(node);
 
     // Recursively walk children
     if (node.children?.length) {
@@ -109,7 +105,7 @@ function walkNode(
 
   // Unknown node type — if it has children, treat as a frame
   if (node.children?.length) {
-    const frame = extractFrame(node, { isDarkMode: ctx.isDarkMode, useShadcn: ctx.useShadcn });
+    const frame = extractFrame(node);
     const children = walkChildren(node.children, ctx);
     if (children.length > 0) {
       frame.children = children;
