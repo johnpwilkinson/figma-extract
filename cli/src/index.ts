@@ -8,7 +8,7 @@
  *   figma-extract --help
  */
 
-import { loadConfig } from "./config";
+import { loadConfig, type FigmaExtractConfig } from "./config";
 import { parseFigmaUrl, parseCliArgs, fetchFigmaNodes, fetchImageFills, fetchNodeScreenshot } from "./figma-api";
 import { walkTree, type WalkContext } from "./parser/index";
 import { formatTree } from "./formatter";
@@ -47,14 +47,26 @@ async function main() {
   }
 
   const jsonMode = args.includes("--json");
-  const filteredArgs = args.filter((a) => a !== "--json");
+  const filteredArgs = args.filter((a) => {
+    if (a === "--dark" || a === "--light") {
+      console.error("[figma-extract] Warning: --dark/--light flags are no longer used (ignored)");
+      return false;
+    }
+    return a !== "--json";
+  });
 
   try {
     // Parse target
     const target = parseCliArgs(filteredArgs);
 
     // Load config
-    const config = await loadConfig();
+    let config: FigmaExtractConfig;
+    try {
+      config = await loadConfig();
+    } catch (e) {
+      console.error("[figma-extract] Invalid .figma-extract.json: " + (e instanceof Error ? e.message : e));
+      config = {};
+    }
 
     // Fetch from Figma API — nodes + image fills + screenshot in parallel
     const [response, imageFills, screenshotUrl] = await Promise.all([
