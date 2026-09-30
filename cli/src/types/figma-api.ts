@@ -62,12 +62,19 @@ export interface FigmaComponentProperty {
   value: string | boolean;
 }
 
+/** AI: Dev Mode annotation: a note (`label`), pinned node properties (`properties`, e.g. "fontSize"), or both. */
+export interface FigmaAnnotation {
+  label?: string;
+  properties?: Array<{ type: string }>;
+}
+
 export interface FigmaNode {
   id: string;
   name: string;
   type: string;
   visible?: boolean;
   children?: FigmaNode[];
+  annotations?: FigmaAnnotation[];
 
   // Layout (FRAME, COMPONENT, INSTANCE)
   layoutMode?: "NONE" | "HORIZONTAL" | "VERTICAL";

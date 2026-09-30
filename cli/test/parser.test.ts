@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { walkTree, type WalkContext } from "../src/parser/index";
 import { formatTree } from "../src/formatter";
-import type { FigmaFileNodesResponse } from "../src/types/figma-api";
+import type { FigmaFileNodesResponse, FigmaNode } from "../src/types/figma-api";
 import type { FigmaExtractConfig } from "../src/config";
 import type { ParsedFrame, ParsedText, ParsedInstance, ParsedIcon, ParsedShape } from "../src/types/parsed";
 
@@ -195,5 +195,36 @@ describe("formatTree integration", () => {
 
   test("output does NOT contain hidden element", () => {
     expect(output).not.toContain("Hidden Element");
+  });
+});
+
+describe("walkTree annotations", () => {
+  test("attaches Dev Mode annotations to their own node and drops empty ones", () => {
+    const card: FigmaNode = {
+      id: "1:1",
+      name: "Card",
+      type: "FRAME",
+      children: [
+        {
+          id: "1:2",
+          name: "Bar",
+          type: "FRAME",
+          annotations: [
+            { label: "Adjust size of bar" },
+            { properties: [{ type: "fills" }] },
+            {},
+          ],
+        },
+      ],
+    };
+
+    const [parsedCard] = walkTree(card, ctx);
+    const parsedBar = parsedCard.children?.[0];
+
+    expect(parsedCard.annotations).toBeUndefined();
+    expect(parsedBar?.annotations).toEqual([
+      { label: "Adjust size of bar", properties: [] },
+      { properties: ["fills"] },
+    ]);
   });
 });

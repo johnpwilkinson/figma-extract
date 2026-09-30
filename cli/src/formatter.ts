@@ -295,9 +295,27 @@ function formatImage(
   return lines.join("\n");
 }
 
+function formatAnnotations(node: ParsedNode, level: number): string[] {
+  return (node.annotations ?? []).map((annotation) => {
+    const label = annotation.label ? '"' + annotation.label + '"' : "";
+    const properties = annotation.properties.length
+      ? "(highlights: " + annotation.properties.join(", ") + ")"
+      : "";
+    return ind(level) + "Annotation: " + [label, properties].filter(Boolean).join(" ");
+  });
+}
+
 export function formatNode(
   node: ParsedNode,
   level: number = 0
+): string {
+  const [header, ...body] = formatNodeBody(node, level).split("\n");
+  return [header, ...formatAnnotations(node, level + 1), ...body].join("\n");
+}
+
+function formatNodeBody(
+  node: ParsedNode,
+  level: number
 ): string {
   switch (node.type) {
     case "TEXT":

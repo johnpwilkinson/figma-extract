@@ -17,11 +17,17 @@ export type ParsedNodeType =
   | "SHAPE"
   | "IMAGE";
 
+export interface ParsedAnnotation {
+  label?: string;
+  properties: string[];
+}
+
 export interface ParsedNodeBase {
   type: ParsedNodeType;
   name: string;
   figmaId: string;
   children?: ParsedNode[];
+  annotations?: ParsedAnnotation[];
 }
 
 export interface ParsedFrame extends ParsedNodeBase {

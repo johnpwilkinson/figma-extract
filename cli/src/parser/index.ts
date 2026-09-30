@@ -3,8 +3,8 @@
  * Dispatches each node to the appropriate extractor based on its type.
  */
 
-import type { FigmaNode, FigmaComponentMeta } from "../types/figma-api";
-import type { ParsedNode } from "../types/parsed";
+import type { FigmaNode, FigmaComponentMeta, FigmaAnnotation } from "../types/figma-api";
+import type { ParsedNode, ParsedAnnotation } from "../types/parsed";
 import type { FigmaExtractConfig } from "../config";
 import { extractFrame } from "./frame";
 import { extractText, type TextExtractorConfig } from "./text";
@@ -42,11 +42,29 @@ const SHAPE_TYPES = new Set([
   "ELLIPSE",
 ]);
 
+function parseAnnotation(annotation: FigmaAnnotation): ParsedAnnotation | undefined {
+  const properties = annotation.properties?.map((property) => property.type) ?? [];
+  if (!annotation.label && properties.length === 0) return undefined;
+  return { label: annotation.label, properties };
+}
+
 /**
- * Walk a single Figma node and return its parsed representation.
- * Skips invisible nodes (returns undefined).
+ * Walk a single Figma node and return its parsed representation, with any
+ * Dev Mode annotations attached. Skips invisible nodes (returns undefined).
  */
 function walkNode(
+  node: FigmaNode,
+  ctx: WalkContext,
+): ParsedNode | undefined {
+  const parsed = parseNode(node, ctx);
+  const annotations = (node.annotations ?? [])
+    .map(parseAnnotation)
+    .filter((annotation): annotation is ParsedAnnotation => annotation !== undefined);
+  if (!parsed || annotations.length === 0) return parsed;
+  return { ...parsed, annotations };
+}
+
+function parseNode(
   node: FigmaNode,
   ctx: WalkContext,
 ): ParsedNode | undefined {

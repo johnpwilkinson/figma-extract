@@ -220,3 +220,27 @@ describe("formatTree", () => {
     expect(output).toContain("TEXT: title");
   });
 });
+
+describe("formatNode annotations", () => {
+  test("prints annotations directly under the node header", () => {
+    const node: ParsedFrame = {
+      type: "FRAME",
+      name: "Bar",
+      figmaId: "1:2",
+      width: "fill-parent",
+      height: "8px",
+      annotations: [
+        { label: "Adjust size of bar", properties: [] },
+        { properties: ["fontSize", "fills"] },
+      ],
+    };
+
+    const lines = formatNode(node, 1).split("\n");
+
+    expect(lines.slice(0, 3)).toEqual([
+      "  FRAME: Bar",
+      '    Annotation: "Adjust size of bar"',
+      "    Annotation: (highlights: fontSize, fills)",
+    ]);
+  });
+});

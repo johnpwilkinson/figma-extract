@@ -23,6 +23,7 @@ The CLI makes three parallel API calls and outputs:
 - A `Screenshot:` URL at the top — view this first to understand the overall layout
 - A flat spec with every node's properties and Tailwind class mappings
 - `Asset:` paths for any brand SVGs it exported to `src/assets/`
+- `Annotation:` lines under any node the designer annotated in Dev Mode — a quoted note (e.g. `Annotation: "Adjust colors of text"`), pinned properties (e.g. `Annotation: (highlights: fontSize)`), or both
 
 **What the CLI outputs for colors:** Every color appears as `hex → tailwind-class` (e.g., `#171717 → text-neutral-900`). These are raw values resolved against the default Tailwind palette. The CLI does NOT attempt to map colors to semantic tokens — that's your job in Phase 1.5 below.
 
@@ -70,6 +71,7 @@ This follows the brainstorming pattern: one question at a time, multiple choice 
 - Which components you plan to use (Table, Button, Badge, Checkbox, Select, etc.)
 - How you'll map the extracted colors to the project's tokens (present the mapping from Phase 1.5)
 - Any brand assets the CLI exported
+- Every `Annotation:` in the spec, with the node it belongs to
 
 Ask: "Does this look right? Anything I'm misreading?"
 
@@ -154,6 +156,8 @@ Work through the spec from top to bottom, informed by the planning phase (or def
 - For other design systems: use the system's theming API (e.g., MUI's `sx={{ color: 'text.primary' }}`).
 
 **Handle assets.** Import brand SVGs from `src/assets/` where the CLI shows `Asset:` paths. For image fills with `URL:` fields, use `<img>` tags. For unresolved `Ref:` fields, use a placeholder.
+
+**Follow annotations.** An `Annotation:` line is the designer's instruction for the node it sits under. Apply a quoted note to that node, and ask the user if it's ambiguous. `(highlights: ...)` marks properties the designer called out — match those values exactly.
 
 **Build for reuse.** Unless the user specifically chose option C (visual only) in planning:
 - Extract repeating data into a typed array and render with `.map()`
